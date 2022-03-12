@@ -1,6 +1,6 @@
-module github.com/NYTimes/openapi2proto
+module go.lsp.dev/openapi2proto
 
-go 1.12
+go 1.17
 
 require (
 	github.com/dolmen-go/jsonptr v0.0.0-20190227181151-a830c2c3c0fe

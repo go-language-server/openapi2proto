@@ -7,10 +7,11 @@ import (
 	"io"
 	"os"
 
-	"github.com/NYTimes/openapi2proto"
-	"github.com/NYTimes/openapi2proto/compiler"
-	"github.com/NYTimes/openapi2proto/protobuf"
 	"github.com/pkg/errors"
+
+	"go.lsp.dev/openapi2proto"
+	"go.lsp.dev/openapi2proto/compiler"
+	"go.lsp.dev/openapi2proto/protobuf"
 )
 
 func main() {

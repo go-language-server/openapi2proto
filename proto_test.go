@@ -8,10 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/NYTimes/openapi2proto"
-	"github.com/NYTimes/openapi2proto/compiler"
-	"github.com/NYTimes/openapi2proto/protobuf"
 	"github.com/pmezard/go-difflib/difflib"
+
+	"go.lsp.dev/openapi2proto"
+	"go.lsp.dev/openapi2proto/compiler"
+	"go.lsp.dev/openapi2proto/protobuf"
 )
 
 type genProtoTestCase struct {

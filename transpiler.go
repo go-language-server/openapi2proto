@@ -1,12 +1,13 @@
-package openapi2proto // github.com/NYTimes/openapi2proto
+package openapi2proto // go.lsp.dev/openapi2proto
 
 import (
 	"io"
 
-	"github.com/NYTimes/openapi2proto/compiler"
-	"github.com/NYTimes/openapi2proto/openapi"
-	"github.com/NYTimes/openapi2proto/protobuf"
 	"github.com/pkg/errors"
+
+	"go.lsp.dev/openapi2proto/compiler"
+	"go.lsp.dev/openapi2proto/openapi"
+	"go.lsp.dev/openapi2proto/protobuf"
 )
 
 // Transpile is a convenience function that takes an OpenAPI

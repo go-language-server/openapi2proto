@@ -1,4 +1,4 @@
-package option // github.com/NYTimes/openapi2proto/internal/option
+package option // go.lsp.dev/openapi2proto/internal/option
 
 type Option interface {
 	Name() string

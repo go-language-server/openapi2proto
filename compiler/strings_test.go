@@ -3,7 +3,7 @@ package compiler
 import (
 	"testing"
 
-	"github.com/NYTimes/openapi2proto/openapi"
+	"go.lsp.dev/openapi2proto/openapi"
 )
 
 type endpointNamingConversionTestCase struct {
@@ -46,7 +46,7 @@ func TestEnumNames(t *testing.T) {
 			Expected: "FOO_AND_BAR",
 		},
 		{
-			Source: "bad chars % { } [ ] ( ) / . ' ’ -",
+			Source:   "bad chars % { } [ ] ( ) / . ' ’ -",
 			Expected: "BAD_CHARS",
 		},
 	}

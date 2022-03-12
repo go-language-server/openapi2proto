@@ -1,9 +1,9 @@
 package openapi2proto
 
 import (
-	"github.com/NYTimes/openapi2proto/compiler"
-	"github.com/NYTimes/openapi2proto/internal/option"
-	"github.com/NYTimes/openapi2proto/protobuf"
+	"go.lsp.dev/openapi2proto/compiler"
+	"go.lsp.dev/openapi2proto/internal/option"
+	"go.lsp.dev/openapi2proto/protobuf"
 )
 
 const (

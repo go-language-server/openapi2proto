@@ -1,6 +1,6 @@
 package protobuf
 
-import "github.com/NYTimes/openapi2proto/internal/option"
+import "go.lsp.dev/openapi2proto/internal/option"
 
 const (
 	optkeyIndent              = "indent"
