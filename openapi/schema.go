@@ -2,9 +2,9 @@ package openapi
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"reflect"
-
-	"github.com/pkg/errors"
 )
 
 // Using reflect is reaaaaaal slow, so we should really be generating
@@ -40,7 +40,7 @@ func (s *Schema) UnmarshalJSON(data []byte) error {
 	nv := reflect.New(schemaProxyType)
 
 	if err := json.Unmarshal(data, nv.Interface()); err != nil {
-		return errors.Wrap(err, `failed to unmarshal JSON`)
+		return fmt.Errorf("failed to unmarshal JSON: %w", err)
 	}
 
 	nv = nv.Elem()
@@ -73,7 +73,7 @@ func (s *SchemaType) UnmarshalJSON(data []byte) error {
 		return nil
 	}
 
-	return errors.Errorf(`invalid type '%s'`, data)
+	return fmt.Errorf("invalid type %q", data)
 }
 
 // UnmarshalYAML decodes YAML data into a SchemaType
@@ -94,7 +94,7 @@ func (s *SchemaType) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return nil
 	}
 
-	return errors.New(`invalid type for schema type`)
+	return errors.New("invalid type for schema type")
 }
 
 // Empty returns true if there was no type specified

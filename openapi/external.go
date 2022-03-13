@@ -2,6 +2,7 @@ package openapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -13,8 +14,7 @@ import (
 	"strings"
 
 	"github.com/dolmen-go/jsonptr"
-	"github.com/pkg/errors"
-	yaml "gopkg.in/yaml.v2"
+	yaml "github.com/goccy/go-yaml"
 )
 
 var interfaceType = reflect.TypeOf((*interface{})(nil)).Elem()
@@ -147,7 +147,7 @@ var refKey = reflect.ValueOf(`$ref`)
 func parseRef(s string) (string, string, error) {
 	u, err := url.Parse(s)
 	if err != nil {
-		return "", "", errors.Wrapf(err, `failed to parse URL %s`, s)
+		return "", "", fmt.Errorf("failed to parse URL %s: %w", s, err)
 	}
 
 	frag := u.Fragment
@@ -183,7 +183,7 @@ func (r *resolver) Resolve(v interface{}, options ...Option) (interface{}, error
 
 	rv, err := c.resolve(restoreSanity(reflect.ValueOf(v)))
 	if err != nil {
-		return nil, errors.Wrap(err, `failed to resolve object`)
+		return nil, fmt.Errorf("failed to resolve object: %w", err)
 	}
 
 	return restoreSanity(rv).Interface(), nil
@@ -201,7 +201,7 @@ func (c *resolveCtx) resolve(rv reflect.Value) (reflect.Value, error) {
 		for i := 0; i < rv.Len(); i++ {
 			newV, err := c.resolve(rv.Index(i))
 			if err != nil {
-				return zeroval, errors.Wrapf(err, `failed to resolve element %d`, i)
+				return zeroval, fmt.Errorf("failed to resolve element %d: %w", i, err)
 			}
 			rv.Index(i).Set(newV)
 		}
@@ -209,19 +209,19 @@ func (c *resolveCtx) resolve(rv reflect.Value) (reflect.Value, error) {
 		// if it's a map, see if we have a "$ref" key
 		if refValue := rv.MapIndex(refKey); refValue != zeroval {
 			if refValue.Kind() != reflect.Interface {
-				return zeroval, errors.Errorf("'$ref' key contains non-interface{} element (%s)", refValue.Type())
+				return zeroval, fmt.Errorf("'$ref' key contains non-interface{} element (%s)", refValue.Type())
 			}
 			refValue = refValue.Elem()
 
 			if refValue.Kind() != reflect.String {
-				return zeroval, errors.Errorf("'$ref' key contains non-string element (%s)", refValue.Type())
+				return zeroval, fmt.Errorf("'$ref' key contains non-string element (%s)", refValue.Type())
 			}
 
 			ref := refValue.String()
 			if isExternal(ref) {
 				refURL, refFragment, err := parseRef(ref)
 				if err != nil {
-					return zeroval, errors.Wrap(err, `failed to parse reference`)
+					return zeroval, fmt.Errorf("failed to parse reference: %w", err)
 				}
 
 				// if we have already loaded this, don't make another
@@ -231,7 +231,7 @@ func (c *resolveCtx) resolve(rv reflect.Value) (reflect.Value, error) {
 					var err error
 					resolved, err = c.loadExternal(refURL)
 					if err != nil {
-						return zeroval, errors.Wrapf(err, `failed to resolve external reference %s`, ref)
+						return zeroval, fmt.Errorf("failed to resolve external reference %s: %w", ref, err)
 					}
 					// remember that we have resolved this document
 					c.cache[refURL] = resolved
@@ -239,7 +239,7 @@ func (c *resolveCtx) resolve(rv reflect.Value) (reflect.Value, error) {
 
 				docFragment, err := jsonptr.Get(restoreSanity(reflect.ValueOf(resolved)).Interface(), refFragment)
 				if err != nil {
-					return zeroval, errors.Wrapf(err, `failed to resolve document fragment %s`, refFragment)
+					return zeroval, fmt.Errorf("failed to resolve document fragment %s: %w", refFragment, err)
 				}
 
 				// recurse into docFragment
@@ -252,7 +252,7 @@ func (c *resolveCtx) resolve(rv reflect.Value) (reflect.Value, error) {
 		for _, key := range rv.MapKeys() {
 			newV, err := c.resolve(rv.MapIndex(key))
 			if err != nil {
-				return zeroval, errors.Wrapf(err, `failed to resolve map element for %s`, key)
+				return zeroval, fmt.Errorf("failed to resolve map element for %s: %w", key, err)
 			}
 			rv.SetMapIndex(key, newV)
 		}
@@ -271,7 +271,7 @@ func (c *resolveCtx) normalizePath(s string) string {
 func (c *resolveCtx) loadExternal(s string) (interface{}, error) {
 	u, err := url.Parse(s)
 	if err != nil {
-		return nil, errors.Wrapf(err, `failed to parse reference %s`, s)
+		return nil, fmt.Errorf("failed to parse reference %s: %w", s, err)
 	}
 
 	var src io.Reader
@@ -279,24 +279,24 @@ func (c *resolveCtx) loadExternal(s string) (interface{}, error) {
 	case "":
 		f, err := os.Open(c.normalizePath(u.Path))
 		if err != nil {
-			return nil, errors.Wrapf(err, `failed to read local file %s`, u.Path)
+			return nil, fmt.Errorf("failed to read local file %s: %w", u.Path, err)
 		}
 		defer f.Close()
 		src = f
 	case "http", "https":
 		res, err := http.Get(u.String())
 		if err != nil {
-			return nil, errors.Wrapf(err, `failed to fetch remote file %s`, u.String())
+			return nil, fmt.Errorf("failed to fetch remote file %s: %w", u, err)
 		}
 		defer res.Body.Close()
 
 		if res.StatusCode != http.StatusOK {
-			return nil, errors.Wrapf(err, `failed to fetch remote file %s`, u.String())
+			return nil, fmt.Errorf("failed to fetch remote file %s: %w", u, err)
 		}
 
 		src = res.Body
 	default:
-		return nil, errors.Errorf(`cannot handle reference %s`, s)
+		return nil, fmt.Errorf("cannot handle reference %s", s)
 	}
 
 	// now guess from the file nam if this is a YAML or JSON
@@ -304,11 +304,11 @@ func (c *resolveCtx) loadExternal(s string) (interface{}, error) {
 	switch strings.ToLower(path.Ext(u.Path)) {
 	case ".yaml", ".yml":
 		if err := yaml.NewDecoder(src).Decode(&v); err != nil {
-			return nil, errors.Wrapf(err, `failed to decode reference %s`, s)
+			return nil, fmt.Errorf("failed to decode reference %s: %w", s, err)
 		}
 	default:
 		if err := json.NewDecoder(src).Decode(&v); err != nil {
-			return nil, errors.Wrapf(err, `failed to decode reference %s`, s)
+			return nil, fmt.Errorf("failed to decode reference %s: %w", s, err)
 		}
 	}
 

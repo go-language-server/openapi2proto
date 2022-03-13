@@ -1,9 +1,8 @@
 package openapi2proto // go.lsp.dev/openapi2proto
 
 import (
+	"fmt"
 	"io"
-
-	"github.com/pkg/errors"
 
 	"go.lsp.dev/openapi2proto/compiler"
 	"go.lsp.dev/openapi2proto/openapi"
@@ -34,16 +33,16 @@ func Transpile(dst io.Writer, srcFn string, options ...Option) error {
 
 	s, err := openapi.LoadFile(srcFn)
 	if err != nil {
-		return errors.Wrap(err, `failed to load OpenAPI spec`)
+		return fmt.Errorf("failed to load OpenAPI spec: %w", err)
 	}
 
 	p, err := compiler.Compile(s, compilerOptions...)
 	if err != nil {
-		return errors.Wrap(err, `failed to compile OpenAPI spec to Protocol buffers`)
+		return fmt.Errorf("failed to compile OpenAPI spec to Protocol buffers: %w", err)
 	}
 
 	if err := protobuf.NewEncoder(dst, encoderOptions...).Encode(p); err != nil {
-		return errors.Wrap(err, `failed to encode protocol buffers to text`)
+		return fmt.Errorf("failed to encode protocol buffers to text: %w", err)
 	}
 
 	return nil

@@ -1,13 +1,13 @@
 // Package compiler contains tools to take openapi.* definitions and
 // compile them into protobuf.* structures.
-package compiler // go.lsp.dev/openapi2proto/compiler
+package compiler
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"sort"
 	"strings"
-
-	"github.com/pkg/errors"
 
 	"go.lsp.dev/openapi2proto/openapi"
 	"go.lsp.dev/openapi2proto/protobuf"
@@ -102,23 +102,23 @@ func Compile(spec *openapi.Spec, options ...Option) (*protobuf.Package, error) {
 	}
 
 	if err := c.compileGlobalOptions(spec.GlobalOptions); err != nil {
-		return nil, errors.Wrap(err, `failed to compile global options`)
+		return nil, fmt.Errorf("failed to compile global options: %w", err)
 	}
 
 	// compile all definitions
 	if err := c.compileDefinitions(spec.Definitions); err != nil {
-		return nil, errors.Wrap(err, `failed to compile definitions`)
+		return nil, fmt.Errorf("failed to compile definitions: %w", err)
 	}
 	if err := c.compileParameters(spec.Parameters); err != nil {
-		return nil, errors.Wrap(err, `failed to compile parameters`)
+		return nil, fmt.Errorf("failed to compile parameters: %w", err)
 	}
 	if err := c.compileResponses(spec.Responses); err != nil {
-		return nil, errors.Wrap(err, `failed to compile global responses`)
+		return nil, fmt.Errorf("failed to compile global responses: %w", err)
 	}
 
 	p2, err := protobuf.Resolve(c.pkg, c.getTypeFromReference)
 	if err != nil {
-		return nil, errors.Wrap(err, `failed to resolve references`)
+		return nil, fmt.Errorf("failed to resolve references: %w", err)
 	}
 	*(c.pkg) = *(p2.(*protobuf.Package))
 
@@ -127,7 +127,7 @@ func Compile(spec *openapi.Spec, options ...Option) (*protobuf.Package, error) {
 	for _, ext := range spec.Extensions {
 		e, err := c.compileExtension(ext)
 		if err != nil {
-			return nil, errors.Wrap(err, `failed to compile extension`)
+			return nil, fmt.Errorf("failed to compile extension: %w", err)
 		}
 		c.pkg.AddType(e)
 	}
@@ -136,7 +136,7 @@ func Compile(spec *openapi.Spec, options ...Option) (*protobuf.Package, error) {
 	if !c.skipRpcs {
 		c.phase = phaseCompilePaths
 		if err := c.compilePaths(spec.Paths); err != nil {
-			return nil, errors.Wrap(err, `failed to compile paths`)
+			return nil, fmt.Errorf("failed to compile paths: %w", err)
 		}
 	}
 
@@ -182,7 +182,7 @@ func (c *compileCtx) compileDefinitions(definitions map[string]*openapi.Schema) 
 	for ref, schema := range definitions {
 		m, err := c.compileSchema(camelCase(ref), schema)
 		if err != nil {
-			return errors.Wrapf(err, `failed to compile #/definition/%s`, ref)
+			return fmt.Errorf("failed to compile #/definition/%s: %w", ref, err)
 		}
 		c.addDefinition("#/definitions/"+ref, m)
 	}
@@ -197,7 +197,7 @@ func (c *compileCtx) compileParameters(parameters map[string]*openapi.Parameter)
 		_, s, err := c.compileParameterToSchema(param)
 		m, err := c.compileSchema(camelCase(ref), s)
 		if err != nil {
-			return errors.Wrapf(err, `failed to compile #/parameters/%s`, ref)
+			return fmt.Errorf("failed to compile #/parameters/%s: %w", ref, err)
 		}
 
 		pname := m.Name()
@@ -237,7 +237,7 @@ func (c *compileCtx) compileResponses(responses map[string]*openapi.Response) er
 		}
 		m, err := c.compileSchema(camelCase(name), response.Schema)
 		if err != nil {
-			return errors.Wrapf(err, `failed to compile #/parameters/%s`, name)
+			return fmt.Errorf("failed to compile #/parameters/%s: %w", name, err)
 		}
 		c.addDefinition("#/responses/"+name, m)
 	}
@@ -263,7 +263,7 @@ func (c *compileCtx) compileParameterToSchema(param *openapi.Parameter) (string,
 	case param.Ref != "":
 		_, err := c.getTypeFromReference(param.Ref)
 		if err != nil {
-			return "", nil, errors.Wrapf(err, `failed to get type for reference %s`, param.Ref)
+			return "", nil, fmt.Errorf("failed to get type for reference %s: %w", param.Ref, err)
 		}
 		var name = param.Name
 		if name == "" {
@@ -303,7 +303,7 @@ func (c *compileCtx) compileParametersToSchema(params openapi.Parameters) (*open
 	for _, param := range params {
 		name, schema, err := c.compileParameterToSchema(param)
 		if err != nil {
-			return nil, errors.Wrap(err, `failed to compile parameter to schema`)
+			return nil, fmt.Errorf("failed to compile parameter to schema: %w", err)
 		}
 		s.Properties[name] = schema
 	}
@@ -333,16 +333,16 @@ func (c *compileCtx) compilePath(path string, p *openapi.Path) error {
 		if len(params) > 0 {
 			reqSchema, err := c.compileParametersToSchema(params)
 			if err != nil {
-				return errors.Wrap(err, `failed to compile parameters to schema`)
+				return fmt.Errorf("failed to compile parameters to schema: %w", err)
 			}
 			reqName := endpointName + "Request"
 			reqType, err := c.compileSchema(reqName, reqSchema)
 			if err != nil {
-				return errors.Wrapf(err, `failed to compile parameters for %s`, endpointName)
+				return fmt.Errorf("failed to compile parameters for %s: %w", endpointName, err)
 			}
 			m, ok := reqType.(*protobuf.Message)
 			if !ok {
-				return errors.Errorf(`type %s is not a message (%T)`, reqName, reqType)
+				return fmt.Errorf("type %s is not a message (%T)", reqName, reqType, err)
 			}
 			c.addType(reqType)
 			rpc.SetParameter(m)
@@ -366,7 +366,7 @@ func (c *compileCtx) compilePath(path string, p *openapi.Path) error {
 				if resp.Schema.Items != nil {
 					typ, err := c.compileSchema(resName, resp.Schema.Items)
 					if err != nil {
-						return errors.Wrapf(err, `failed to compile array response for %s`, endpointName)
+						return fmt.Errorf("failed to compile array response for %s: %w", endpointName, err)
 					}
 					m := protobuf.NewMessage(resName)
 					f := protobuf.NewField(typ, "items", 1)
@@ -376,14 +376,14 @@ func (c *compileCtx) compilePath(path string, p *openapi.Path) error {
 				} else {
 					typ, err := c.compileSchema(resName, resp.Schema)
 					if err != nil {
-						return errors.Wrapf(err, `failed to compile response for %s`, endpointName)
+						return fmt.Errorf("failed to compile response for %s: %w", endpointName, err)
 					}
 					resType = typ
 				}
 			} else if resp.Ref != "" {
 				typ, err := c.getTypeFromReference(resp.Ref)
 				if err != nil {
-					return errors.Wrapf(err, `failed to look up response ref for %s`, endpointName)
+					return fmt.Errorf("failed to look up response ref for %s: %w", endpointName, err)
 				}
 				resType = typ
 			}
@@ -391,7 +391,7 @@ func (c *compileCtx) compilePath(path string, p *openapi.Path) error {
 			if resType != nil {
 				m, ok := resType.(*protobuf.Message)
 				if !ok {
-					return errors.Errorf(`got non-message type (%T) in response for %s`, resType, endpointName)
+					return fmt.Errorf("got non-message type (%T) in response for %s", resType, endpointName)
 				}
 				rpc.SetResponse(m)
 				c.addType(resType)
@@ -453,7 +453,7 @@ func (c *compileCtx) getType(name string) (protobuf.Type, error) {
 		}
 	}
 
-	return nil, errors.Errorf(`failed to find type %s`, name)
+	return nil, fmt.Errorf("failed to find type %s", name)
 }
 
 func (c *compileCtx) getBoxedType(t protobuf.Type) protobuf.Type {
@@ -486,7 +486,7 @@ func (c *compileCtx) getTypeFromReference(ref string) (protobuf.Type, error) {
 		return t, nil
 	}
 
-	return nil, errors.Errorf(`reference %s could not be resolved`, ref)
+	return nil, fmt.Errorf("reference %s could not be resolved", ref)
 }
 
 func (c *compileCtx) compileEnum(name string, elements []string) (*protobuf.Enum, error) {
@@ -527,7 +527,7 @@ func (c *compileCtx) compileSchemaMultiType(name string, s *openapi.Schema) (pro
 
 	v, err := c.getType(types[0])
 	if err != nil {
-		return nil, errors.Wrapf(err, `failed to get type for %s`, types[0])
+		return nil, fmt.Errorf("failed to get type for %s: %w", types[0], err)
 	}
 	return c.getBoxedType(c.applyBuiltinFormat(v, s.Format)), nil
 }
@@ -540,7 +540,7 @@ func (c *compileCtx) compileMap(name string, rawName string, s *openapi.Schema) 
 		var err error
 		typ, err = c.compileReferenceSchema(name, s)
 		if err != nil {
-			return nil, errors.Wrapf(err, `failed to compile reference %s`, s.Ref)
+			return nil, fmt.Errorf("failed to compile reference %s: %w", s.Ref, err)
 		}
 	case !s.Type.Empty():
 		var err error
@@ -570,19 +570,19 @@ func (c *compileCtx) compileMap(name string, rawName string, s *openapi.Schema) 
 					c.addType(subtyp)
 				}
 			} else {
-				return nil, errors.Errorf(`An array for map types must specify a reference or an object`)
+				return nil, errors.New("an array for map types must specify a reference or an object")
 			}
 		} else {
 			typ, err = c.getType(s.Type.First())
 			if err != nil {
-				return nil, errors.Wrapf(err, `failed to get type %s`, s.Type)
+				return nil, fmt.Errorf("failed to get type %s: %w", s.Type, err)
 			}
 		}
 	default:
 		var err error
 		typ, err = c.compileSchema(name, s)
 		if err != nil {
-			return nil, errors.Wrap(err, `failed to compile map type`)
+			return nil, fmt.Errorf("failed to compile map type: %w", err)
 		}
 	}
 
@@ -607,14 +607,14 @@ func (c *compileCtx) compileReferenceSchema(name string, s *openapi.Schema) (pro
 		r := protobuf.NewReference(s.Ref)
 		return r, nil
 	}
-	return nil, errors.Wrapf(err, `failed to resolve reference %s`, s.Ref)
+	return nil, fmt.Errorf("failed to resolve reference %s: %w", s.Ref, err)
 }
 
 func (c *compileCtx) compileSchema(name string, s *openapi.Schema) (protobuf.Type, error) {
 	if s.Ref != "" {
 		m, err := c.compileReferenceSchema(name, s)
 		if err != nil {
-			return nil, errors.Wrap(err, `failed to resolve reference`)
+			return nil, fmt.Errorf("failed to resolve reference: %w", err)
 		}
 		return m, nil
 	}
@@ -628,7 +628,7 @@ func (c *compileCtx) compileSchema(name string, s *openapi.Schema) (protobuf.Typ
 		// current field
 		m, err := c.compileSchema(name, s.AllOf[0])
 		if err != nil {
-			return nil, errors.Wrap(err, `failed to resolve allOf`)
+			return nil, fmt.Errorf("failed to resolve allOf: %w", err)
 		}
 		return m, nil
 	}
@@ -645,7 +645,7 @@ func (c *compileCtx) compileSchema(name string, s *openapi.Schema) (protobuf.Typ
 	if s.Type.Len() > 1 {
 		v, err := c.compileSchemaMultiType(name, s)
 		if err != nil {
-			return nil, errors.Wrap(err, `failed to compile schema with multiple types`)
+			return nil, fmt.Errorf("failed to compile schema with multiple types: %w", err)
 		}
 		return v, nil
 	}
@@ -670,7 +670,7 @@ func (c *compileCtx) compileSchema(name string, s *openapi.Schema) (protobuf.Typ
 		c.pushParent(m)
 		if err := c.compileSchemaProperties(m, s.Properties); err != nil {
 			c.popParent()
-			return nil, errors.Wrapf(err, `failed to compile properties for %s`, name)
+			return nil, fmt.Errorf("failed to compile properties for %s: %w", name, err)
 		}
 		c.popParent()
 
@@ -682,7 +682,7 @@ func (c *compileCtx) compileSchema(name string, s *openapi.Schema) (protobuf.Typ
 		// but ignore the comments
 		m, err := c.compileSchema(name, s.Items)
 		if err != nil {
-			return nil, errors.Wrap(err, `failed to compile items field of the schema`)
+			return nil, fmt.Errorf("failed to compile items field of the schema: %w", err)
 		}
 		c.addType(m)
 		return m, nil
@@ -691,7 +691,7 @@ func (c *compileCtx) compileSchema(name string, s *openapi.Schema) (protobuf.Typ
 			name = strings.TrimSuffix(name, "Message")
 			t, err := c.compileEnum(name, s.Enum)
 			if err != nil {
-				return nil, errors.Wrap(err, `failed to compile enum field of the schema`)
+				return nil, fmt.Errorf("failed to compile enum field of the schema: %w", err)
 			}
 			c.addType(t)
 			return t, nil
@@ -701,7 +701,7 @@ func (c *compileCtx) compileSchema(name string, s *openapi.Schema) (protobuf.Typ
 		if err != nil {
 			typ, err = c.compileSchema(name, s)
 			if err != nil {
-				return nil, errors.Wrapf(err, `failed to compile protobuf type`)
+				return nil, fmt.Errorf("failed to compile protobuf type: %w", err)
 			}
 			c.addType(typ)
 		}
@@ -710,7 +710,7 @@ func (c *compileCtx) compileSchema(name string, s *openapi.Schema) (protobuf.Typ
 
 		return typ, nil
 	default:
-		return nil, errors.Errorf(`don't know how to handle schema type '%s'`, s.Type)
+		return nil, fmt.Errorf("don't know how to handle schema type %q", s.Type)
 	}
 }
 
@@ -732,7 +732,7 @@ func (c *compileCtx) compileSchemaProperties(m *protobuf.Message, props map[stri
 
 		name, typ, index, repeated, err := c.compileProperty(propName, &copy)
 		if err != nil {
-			return errors.Wrapf(err, `failed to compile property %s`, propName)
+			return fmt.Errorf("failed to compile property %s: %w", propName, err)
 		}
 		fields = append(fields, struct {
 			comment  string
@@ -835,14 +835,14 @@ func (c *compileCtx) compileProperty(name string, prop *openapi.Schema) (string,
 	if prop.Type.Len() > 1 {
 		typ, err = c.compileSchemaMultiType(typName, prop)
 		if err != nil {
-			return "", nil, index, false, errors.Wrap(err, `failed to compile schema with multiple types`)
+			return "", nil, index, false, fmt.Errorf("failed to compile schema with multiple types: %w", err)
 		}
 	} else {
 		switch {
 		case prop.Type.Empty() || prop.Type.Contains("object"):
 			child, err := c.compileSchema(typName, prop)
 			if err != nil {
-				return "", nil, index, false, errors.Wrapf(err, `failed to compile object property %s`, name)
+				return "", nil, index, false, fmt.Errorf("failed to compile object property %s: %w", name, err)
 			}
 			typ = child
 		case prop.Type.Contains("array"):
@@ -851,7 +851,7 @@ func (c *compileCtx) compileProperty(name string, prop *openapi.Schema) (string,
 			copy.Description = ""
 			child, err := c.compileSchema(typName, &copy)
 			if err != nil {
-				return "", nil, index, false, errors.Wrapf(err, `failed to compile array property %s`, name)
+				return "", nil, index, false, fmt.Errorf("failed to compile array property %s: %w", name, err)
 			}
 			typ = child
 			// special case where optional array items can be specified as wrapped types
@@ -864,14 +864,14 @@ func (c *compileCtx) compileProperty(name string, prop *openapi.Schema) (string,
 				enumName := p.Name() + "_" + name
 				typ, err = c.compileEnum(enumName, prop.Enum)
 				if err != nil {
-					return "", nil, index, false, errors.Wrapf(err, `failed to compile enum for property %s`, name)
+					return "", nil, index, false, fmt.Errorf("failed to compile enum for property %s: %w", name, err)
 				}
 			} else {
 				typ, err = c.getType(prop.Type.First())
 				if err != nil {
 					typ, err = c.compileSchema(typName, prop)
 					if err != nil {
-						return "", nil, index, false, errors.Wrapf(err, `failed to compile protobuf type for property %s`, name)
+						return "", nil, index, false, fmt.Errorf("failed to compile protobuf type for property %s: %w", name, err)
 					}
 				}
 			}
@@ -1034,7 +1034,7 @@ func (c *compileCtx) compilePaths(paths map[string]*openapi.Path) error {
 
 	for _, path := range sortedPaths {
 		if err := c.compilePath(path, paths[path]); err != nil {
-			return errors.Wrapf(err, `failed to compile path %s`, path)
+			return fmt.Errorf("failed to compile path %s: %w", path, err)
 		}
 	}
 

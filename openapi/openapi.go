@@ -5,6 +5,7 @@ package openapi // go.lsp.dev/openapi2proto/openapi
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -13,25 +14,24 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/pkg/errors"
-	yaml "gopkg.in/yaml.v2"
+	yaml "github.com/goccy/go-yaml"
 )
 
 func fetchRemoteContent(u string) (io.Reader, error) {
 	res, err := http.Get(u)
 	if err != nil {
-		return nil, errors.Wrap(err, `failed to get remote content`)
+		return nil, fmt.Errorf("failed to get remote content: %w", err)
 	}
 
 	if res.StatusCode != http.StatusOK {
-		return nil, errors.Errorf(`remote content responded with status %d`, res.StatusCode)
+		return nil, fmt.Errorf("remote content responded with status %d", res.StatusCode)
 	}
 
 	defer res.Body.Close()
 
 	var buf bytes.Buffer
 	if _, err := io.Copy(&buf, res.Body); err != nil {
-		return nil, errors.Wrap(err, `failed to read remote content`)
+		return nil, fmt.Errorf("failed to read remote content: %w", err)
 	}
 
 	return &buf, nil
@@ -45,13 +45,13 @@ func LoadFile(fn string) (*Spec, error) {
 	if u, err := url.Parse(fn); err == nil && (u.Scheme == `http` || u.Scheme == `https`) {
 		rdr, err := fetchRemoteContent(u.String())
 		if err != nil {
-			return nil, errors.Wrapf(err, `failed to fetch remote content %s`, fn)
+			return nil, fmt.Errorf("failed to fetch remote content %s: %w", fn, err)
 		}
 		src = rdr
 	} else {
 		f, err := os.Open(fn)
 		if err != nil {
-			return nil, errors.Wrapf(err, `failed to open file %s`, fn)
+			return nil, fmt.Errorf("failed to open file %s: %w", fn, err)
 		}
 		defer f.Close()
 		src = f
@@ -63,19 +63,19 @@ func LoadFile(fn string) (*Spec, error) {
 	switch ext := strings.ToLower(path.Ext(fn)); ext {
 	case ".yaml", ".yml":
 		if err := yaml.NewDecoder(src).Decode(&v); err != nil {
-			return nil, errors.Wrapf(err, `failed to decode file %s`, fn)
+			return nil, fmt.Errorf("failed to decode file %s: %w", fn, err)
 		}
 	case ".json":
 		if err := json.NewDecoder(src).Decode(&v); err != nil {
-			return nil, errors.Wrapf(err, `failed to decode file %s`, fn)
+			return nil, fmt.Errorf("failed to decode file %s: %w", fn, err)
 		}
 	default:
-		return nil, errors.Errorf(`unsupported file extension type %s`, ext)
+		return nil, fmt.Errorf("unsupported file extension type %s", ext)
 	}
 
 	resolved, err := newResolver().Resolve(v, options...)
 	if err != nil {
-		return nil, errors.Wrap(err, `failed to resolve external references`)
+		return nil, fmt.Errorf("failed to resolve external references: %w", err)
 	}
 
 	// We re-encode the structure here because ... it's easier this way.
@@ -125,12 +125,12 @@ func LoadFile(fn string) (*Spec, error) {
 	// what we are doing when we are traversing the openapi spec.
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(resolved); err != nil {
-		return nil, errors.Wrap(err, `failed to encode resolved schema`)
+		return nil, fmt.Errorf("failed to encode resolved schema: %w", err)
 	}
 
 	var spec Spec
 	if err := json.Unmarshal(buf.Bytes(), &spec); err != nil {
-		return nil, errors.Wrap(err, `failed to decode content`)
+		return nil, fmt.Errorf("failed to decode content: %w", err)
 	}
 
 	// One last thing: populate some fields that are obvious to

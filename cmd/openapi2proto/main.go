@@ -7,21 +7,19 @@ import (
 	"io"
 	"os"
 
-	"github.com/pkg/errors"
-
 	"go.lsp.dev/openapi2proto"
 	"go.lsp.dev/openapi2proto/compiler"
 	"go.lsp.dev/openapi2proto/protobuf"
 )
 
 func main() {
-	if err := _main(); err != nil {
+	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %s", err)
 		os.Exit(1)
 	}
 }
 
-func _main() error {
+func run() error {
 	specPath := flag.String("spec", "../../spec.yaml", "location of the swagger spec file")
 	annotate := flag.Bool("annotate", false, "include (google.api.http) options for grpc-gateway. Defaults to false if not set")
 	outfile := flag.String("out", "", "the file to output the result to. Defaults to stdout if not set")
@@ -37,7 +35,7 @@ func _main() error {
 	if *outfile != "" {
 		f, err := os.Create(*outfile)
 		if err != nil {
-			return errors.Wrapf(err, `failed to open output file (%v)`, outfile)
+			return fmt.Errorf("failed to open output file (%s): %w", *outfile, err)
 		}
 		defer f.Close()
 		dst = f
@@ -72,7 +70,7 @@ func _main() error {
 	}
 
 	if err := openapi2proto.Transpile(dst, *specPath, options...); err != nil {
-		return errors.Wrap(err, `failed to transpile`)
+		return fmt.Errorf("failed to transpile: %w", err)
 	}
 	return nil
 }

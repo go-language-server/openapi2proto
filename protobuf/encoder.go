@@ -8,8 +8,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
 // NewEncoder creates an Encoder object that writes the
@@ -47,10 +45,10 @@ func (e *Encoder) Encode(v interface{}) error {
 	switch v.(type) {
 	case *Package:
 		if err := e.EncodePackage(v.(*Package)); err != nil {
-			return errors.Wrap(err, `failed to encode protocol buffers package`)
+			return fmt.Errorf("failed to encode protocol buffers package: %w", err)
 		}
 	default:
-		return errors.Errorf(`unknown type %T (%s)`, v, v)
+		return fmt.Errorf("unknown type %T (%s)", v, v)
 	}
 	return nil
 }
@@ -98,7 +96,7 @@ func (e *Encoder) writeBlock(name string, src io.Reader) error {
 	fmt.Fprintf(e.dst, "\n%s {", name)
 	n, err := indent(e.dst, src, e.indent)
 	if err != nil {
-		return errors.Wrap(err, `failed to indent block`)
+		return fmt.Errorf("failed to indent block: %w", err)
 	}
 	if n > 0 {
 		// something was written, so we need to make sure to insert
@@ -114,7 +112,7 @@ func (e *Encoder) EncodeMessage(v *Message) error {
 	var buf bytes.Buffer
 	subEncoder := e.subEncoder(&buf)
 	if err := subEncoder.encodeChildren(v); err != nil {
-		return errors.Wrap(err, `failed to encode message definitions`)
+		return fmt.Errorf("failed to encode message definitions: %w", err)
 	}
 
 	sort.Slice(v.fields, func(i, j int) bool {
@@ -127,7 +125,7 @@ func (e *Encoder) EncodeMessage(v *Message) error {
 		}
 
 		if err := subEncoder.EncodeField(field); err != nil {
-			return errors.Wrapf(err, `failed to encode field %s for message %s`, field.Name(), v.Name())
+			return fmt.Errorf("failed to encode field %s for message %s: %w", field.Name(), v.Name(), err)
 		}
 	}
 
@@ -136,7 +134,7 @@ func (e *Encoder) EncodeMessage(v *Message) error {
 		e.comment(v.comment)
 	}
 	if err := e.writeBlock("message "+v.name, &buf); err != nil {
-		return errors.Wrap(err, `failed to write message block`)
+		return fmt.Errorf("failed to write message block: %w", err)
 	}
 	return nil
 }
@@ -150,7 +148,7 @@ func (e *Encoder) EncodeHTTPAnnotation(a *HTTPAnnotation) error {
 	}
 
 	if err := e.writeBlock("option (google.api.http) =", &buf); err != nil {
-		return errors.Wrap(err, `failed to write http annotation block`)
+		return fmt.Errorf("failed to write http annotation block: %w", err)
 	}
 	fmt.Fprintf(e.dst, ";")
 	return nil
@@ -196,12 +194,12 @@ func (e *Encoder) EncodeRPCOption(v interface{}) error {
 	switch x := v.(type) {
 	case *HTTPAnnotation:
 		if err := e.EncodeHTTPAnnotation(x); err != nil {
-			return errors.Wrap(err, `failed to encode http annotation`)
+			return fmt.Errorf("failed to encode http annotation: %w", err)
 		}
 	case *RPCOption:
 		fmt.Fprintf(e.dst, "\noption (%s) = %s;", x.name, stringify(x.value))
 	default:
-		return errors.Errorf(`unknown rpc option %T`, v)
+		return fmt.Errorf("unknown rpc option %T", v)
 	}
 	return nil
 }
@@ -231,20 +229,20 @@ func (e *Encoder) EncodeRPC(r *RPC) error {
 
 	for _, option := range sortedOptions {
 		if err := subEncoder.EncodeRPCOption(option); err != nil {
-			return errors.Wrap(err, `failed to encode rpc options`)
+			return fmt.Errorf("failed to encode rpc options: %w", err)
 		}
 	}
 
 	if len(r.comment) > 0 {
 		fmt.Fprintf(e.dst, "\n")
 		if _, err := e.comment(r.comment); err != nil {
-			return errors.Wrap(err, `failed to write comment`)
+			return fmt.Errorf("failed to write comment: %w", err)
 		}
 	}
 
 	name := fmt.Sprintf("rpc %s(%s) returns (%s)", r.name, r.parameter.Name(), r.response.Name())
 	if err := e.writeBlock(name, &buf); err != nil {
-		return errors.Wrap(err, `failed to write rpc block`)
+		return fmt.Errorf("failed to write rpc block: %w", err)
 	}
 	return nil
 }
@@ -266,12 +264,12 @@ func (e *Encoder) EncodeService(s *Service) error {
 			fmt.Fprintf(&buf, "\n")
 		}
 		if err := subEncoder.EncodeRPC(rpc); err != nil {
-			return errors.Wrapf(err, `failed to encode rpc %s for service %s`, rpc.name, s.name)
+			return fmt.Errorf("failed to encode rpc %s for service %s", rpc.name, s.name)
 		}
 	}
 
 	if err := e.writeBlock("service "+s.name, &buf); err != nil {
-		return errors.Wrap(err, `failed to write service block`)
+		return fmt.Errorf("failed to write service block: %w", err)
 	}
 	return nil
 }
@@ -288,7 +286,7 @@ func (e *Encoder) EncodeEnum(v *Enum) error {
 		e.comment(v.comment)
 	}
 	if err := e.writeBlock("enum "+v.name, &buf); err != nil {
-		return errors.Wrap(err, `failed to write enum block`)
+		return fmt.Errorf("failed to write enum block: %w", err)
 	}
 	return nil
 }
@@ -299,26 +297,26 @@ func (e *Encoder) EncodeType(v Type) error {
 	switch x := v.(type) {
 	case *Package:
 		if err := e.encodeChildren(x); err != nil {
-			return errors.Wrap(err, `failed to encode package definitions`)
+			return fmt.Errorf("failed to encode package definitions: %w", err)
 		}
 	case *Enum:
 		if err := e.EncodeEnum(x); err != nil {
-			return errors.Wrap(err, `failed to encode enum`)
+			return fmt.Errorf("failed to encode enum: %w", err)
 		}
 	case *Message:
 		if err := e.EncodeMessage(x); err != nil {
-			return errors.Wrap(err, `failed to encode message`)
+			return fmt.Errorf("failed to encode message: %w", err)
 		}
 	case *Service:
 		if err := e.EncodeService(x); err != nil {
-			return errors.Wrap(err, `failed to encode service`)
+			return fmt.Errorf("failed to encode service: %w", err)
 		}
 	case *Extension:
 		if err := e.EncodeExtension(x); err != nil {
-			return errors.Wrap(err, `failed to encode extension`)
+			return fmt.Errorf("failed to encode extension: %w", err)
 		}
 	default:
-		return errors.Errorf(`unknown type %T (%s)`, v, v)
+		return fmt.Errorf("unknown type %T (%s)", v, v)
 	}
 	return nil
 }
@@ -335,12 +333,12 @@ func (e *Encoder) EncodeExtension(ext *Extension) error {
 	subEncoder := e.subEncoder(&buf)
 	for _, f := range ext.fields {
 		if err := subEncoder.EncodeExtensionField(f); err != nil {
-			return errors.Wrap(err, `failed to encode extension field`)
+			return fmt.Errorf("failed to encode extension field: %w", err)
 		}
 	}
 
 	if err := e.writeBlock("extend "+ext.base, &buf); err != nil {
-		return errors.Wrap(err, `failed to write extension block`)
+		return fmt.Errorf("failed to write extension block: %w", err)
 	}
 	return nil
 }
@@ -382,7 +380,7 @@ func (e *Encoder) EncodePackage(p *Package) error {
 		fmt.Fprintf(e.dst, "\n")
 		for _, option := range p.options {
 			if err := e.EncodeGlobalOption(option); err != nil {
-				return errors.Wrap(err, `failed to encode global option`)
+				return fmt.Errorf("failed to encode global option: %w", err)
 			}
 		}
 	}
@@ -390,7 +388,7 @@ func (e *Encoder) EncodePackage(p *Package) error {
 	fmt.Fprintf(e.dst, "\n")
 
 	if err := e.encodeChildren(p); err != nil {
-		return errors.Wrap(err, `failed to encode type definition`)
+		return fmt.Errorf("failed to encode type definition: %w", err)
 	}
 
 	return nil
@@ -430,7 +428,7 @@ func (e *Encoder) encodeChildren(t Type) error {
 		}
 
 		if err := e.EncodeType(child); err != nil {
-			return errors.Wrapf(err, `failed to encode %s`, child.Name())
+			return fmt.Errorf("failed to encode %s: %w", child.Name(), err)
 		}
 	}
 
