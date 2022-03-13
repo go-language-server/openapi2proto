@@ -108,6 +108,9 @@ Will generate:
 
 ```
 ╰─➤  openapi2proto -spec swagger.yaml -annotate
+```
+
+```proto
 syntax = "proto3";
 
 package swaggerpetstore;
